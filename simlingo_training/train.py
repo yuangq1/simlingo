@@ -5,7 +5,6 @@ from omegaconf import OmegaConf
 import torch
 import wandb
 
-from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelSummary, ThroughputMonitor
@@ -51,6 +50,7 @@ def main(cfg: TrainConfig):
 
     if cfg.checkpoint is not None:
         if os.path.isdir(cfg.checkpoint):
+            from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
             state_dict = get_fp32_state_dict_from_zero_checkpoint(cfg.checkpoint)
         else:
             state_dict = torch.load(cfg.checkpoint, map_location="cpu")
