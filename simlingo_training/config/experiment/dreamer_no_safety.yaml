@@ -45,6 +45,9 @@ gpus: 1
 seed: 42
 name: dreamer_no_safety
 debug: true
+strategy: ddp
+enable_wandb: false
+precision: 32
 
 hydra:
   run:
