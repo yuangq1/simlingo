@@ -258,7 +258,7 @@ class DrivingModel(pl.LightningModule):
         if per_sample:
             return loss_dict_only_losses, pred_labels
 
-        return summarise_losses(loss_dict_only_losses), loss_logs
+        return summarise_losses(loss_dict_only_losses, weights={'language_loss': 0.0}), loss_logs
 
     def training_step(self, batch: DrivingExample, _batch_idx: int = 0):
         output, loss_logs = self.forward_loss(batch)
@@ -727,6 +727,6 @@ class DrivingModel(pl.LightningModule):
         else:
             max_steps = self.trainer.max_steps
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=self.lr, total_steps=max_steps, pct_start=self.pct_start, verbose=False
+            optimizer, max_lr=self.lr, total_steps=max_steps, pct_start=self.pct_start
         )
         return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "frequency": 1, "interval": "step"}}

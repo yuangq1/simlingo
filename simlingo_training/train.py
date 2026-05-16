@@ -121,7 +121,7 @@ def main(cfg: TrainConfig):
         checkpoint_callback, 
         model_summary, 
         # ThroughputMonitor(batch_size_fn=lambda batch: batch.driving_input.camera_images.size(0)), 
-        VisualiseCallback(interval=1000, val_interval=1000)
+        VisualiseCallback(interval=2000, val_interval=100)
     ]
     if not cfg.debug: 
         callbacks.append(lr_monitor)

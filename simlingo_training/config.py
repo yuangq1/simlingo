@@ -41,6 +41,23 @@ class DrivingModelConfig:
 
 
 @dataclass
+class TCPLangModelConfig:
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_lang.TCPLangModel"
+
+
+@dataclass
 class DatasetBaseConfig:
     data_path: str = "/home/katrinrenz/coding/wayve_carla/database/expertv3_2*"
     bucket_path: str = "data/buckets"
@@ -67,7 +84,10 @@ class DatasetBaseConfig:
     img_shift_augmentation_prob: float = 0.5
     
     use_safety_flag: bool = False
-    
+    use_language_augment: bool = True
+    lang_augment_prob: float = 0.5
+    colloquial_map_path: str = 'data/augmented_templates/instruction_colloquial_map.json'
+
     num_route_points: int = 20
 
     route_as: str = 'target_point_command' # target_point_command, target_point, command
@@ -146,6 +166,7 @@ class TrainConfig:
     val_every_n_epochs: int = 1
 
     checkpoint: Optional[str] = None
+    checkpoint_path: Optional[str] = None  # used by eval_waypoints.py
 
 
 def register_configs():
@@ -154,6 +175,7 @@ def register_configs():
     cs.store(group="data_module", name="driving", node=DrivingDataModuleConfig)
     cs.store(group="data_module/base_dataset", name="dataset", node=DatasetBaseConfig)
     cs.store(group="model", name="driving", node=DrivingModelConfig)
+    cs.store(group="model", name="tcp_lang", node=TCPLangModelConfig)
     cs.store(group="model/vision_model", name="vlm", node=VLMEncoderConfig)
     cs.store(group="model/language_model", name="llm", node=LanguageModelConfig)
 

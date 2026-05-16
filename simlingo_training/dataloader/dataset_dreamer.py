@@ -14,6 +14,7 @@ import gzip
 import torch
 from simlingo_training.utils.custom_types import DatasetOutput
 from simlingo_training.dataloader.dataset_base import BaseDataset
+from simlingo_training.augment_language import ColloquialRewriter
 
 
 VIZ_DATA = False
@@ -27,6 +28,16 @@ class Data_Dreamer(BaseDataset):  # pylint: disable=locally-disabled, invalid-na
             **cfg,
         ):
         super().__init__(dreamer=True, **cfg)
+
+        # 口语化指令改写器（输入侧语言增强）
+        self.use_language_augment = cfg.get('use_language_augment', True)
+        if self.use_language_augment:
+            map_file = cfg.get('colloquial_map_path',
+                               'data/augmented_templates/instruction_colloquial_map.json')
+            augment_prob = cfg.get('lang_augment_prob', 0.5)
+            self.lang_rewriter = ColloquialRewriter(map_file=map_file, prob=augment_prob)
+        else:
+            self.lang_rewriter = None
 
     def __getitem__(self, index):
         """Returns the item at index idx. """
@@ -109,6 +120,12 @@ class Data_Dreamer(BaseDataset):  # pylint: disable=locally-disabled, invalid-na
         chosen_option['dreamer_instruction'] = random.choice(chosen_option['dreamer_instruction'])
 
         dreamer_answer = f"Following the given instruction. Waypoints:"
+
+        # 口语化改写：只用本地 LLM 改写输入指令，不改 answer
+        dreamer_instruction = chosen_option['dreamer_instruction']
+        if self.lang_rewriter is not None:
+            dreamer_instruction = self.lang_rewriter.rewrite(dreamer_instruction)
+
         if activate_safety is not None:
             if activate_safety:
                 if chosen_option['safe_to_execute']:
@@ -127,9 +144,9 @@ class Data_Dreamer(BaseDataset):  # pylint: disable=locally-disabled, invalid-na
         answer = ''
 
         if random.random() < 0.8:
-            prompt = f"Current speed: {speed_rounded} m/s. {random.choice(target_options)} {chosen_option['dreamer_instruction']}"
+            prompt = f"Current speed: {speed_rounded} m/s. {random.choice(target_options)} {dreamer_instruction}"
         else:
-            prompt = f"Current speed: {speed_rounded} m/s. {chosen_option['dreamer_instruction']}"
+            prompt = f"Current speed: {speed_rounded} m/s. {dreamer_instruction}"
             
         waypoints = chosen_option['waypoints']
         waypoints = np.array(waypoints)

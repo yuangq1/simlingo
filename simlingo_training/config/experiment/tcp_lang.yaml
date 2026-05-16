@@ -1,14 +1,17 @@
 # @package _global_
-# Dreamer-only, instruction-following mode (NO safety)
+# TCP + Language Injection: VLM embedding → TCP decoder (GRU + attention)
 defaults:
   - /data_module: carla_no_buckets
   - /model/vision_model: vlm
-  - /data_module/base_dataset: dataset
 
 model:
+  _target_: simlingo_training.models.tcp_lang.TCPLangModel
   lr: 3e-5
-  predict_route_as_wps: True
+  weight_decay: 0.1
+  betas: [0.9, 0.999]
+  pct_start: 0.05
   speed_wps_mode: 2d
+  predict_route_as_wps: True
   language_model:
     variant: 'OpenGVLab/InternVL2-1B'
     lora: True
@@ -21,7 +24,7 @@ model:
 data_module:
   batch_size: 2
   num_workers: 4
-  driving_dataset: null          # only dreamer data
+  driving_dataset: null
   base_dataset:
     data_path: database/simlingo
     bucket_path: database/simlingo/buckets_paths.pkl
@@ -37,19 +40,15 @@ data_module:
     use_lmdrive_commands: True
     use_old_towns: True
     use_town13: True
-    use_safety_flag: False       # ★ 关闭安全模式，纯指令跟随
-    # 语义增强：口语化指令改写（ColloquialRewriter）
-    use_language_augment: True
-    lang_augment_prob: 0.5
-    colloquial_map_path: data/augmented_templates/instruction_colloquial_map.json
+    use_safety_flag: False
 
 max_epochs: 5
 val_every_n_epochs: 1
 gpus: 1
 seed: 42
-name: dreamer_no_safety
+name: tcp_lang
 debug: true
-strategy: ddp_find_unused_parameters_true
+strategy: auto
 enable_wandb: false
 precision: 16-mixed
 

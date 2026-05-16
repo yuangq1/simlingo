@@ -1,3 +1,4 @@
+import os
 import textwrap
 from functools import wraps
 from typing import Any, Callable, Dict
@@ -152,16 +153,20 @@ class VisualiseCallback(Callback):
         name: str,
         language_pred = None,
     ):
-        if not pl_module.logger:
-            return
-
         if 'waypoints' in name:
             waypoint_vis, prompt_img = visualise_waypoints(batch, waypoints, language_pred=language_pred)
         elif 'route' in name:
             waypoint_vis, prompt_img = visualise_waypoints(batch, waypoints, language_pred=language_pred, route=True)
-        pl_module.logger.log_image(
-            f"visualise/{name}", images=[Image.fromarray(waypoint_vis), prompt_img], step=trainer.global_step
-        )
+
+        # save local PNG
+        save_dir = "visualise"
+        os.makedirs(save_dir, exist_ok=True)
+        Image.fromarray(waypoint_vis).save(os.path.join(save_dir, f"step_{trainer.global_step:06d}_{name}.png"))
+
+        if pl_module.logger:
+            pl_module.logger.log_image(
+                f"visualise/{name}", images=[Image.fromarray(waypoint_vis), prompt_img], step=trainer.global_step
+            )
         plt.close("all")
 
 
@@ -217,9 +222,13 @@ def visualise_waypoints(batch: DrivingExample, waypoints, route=False, language_
             lines_wrap = len(textwrap.wrap(wrapped_text, width=80))
             lines_wrap_pred = len(textwrap.wrap(wrapped_pred_text, width=80))
         
-            white_draw.text((10, y_curr), f'{i} GT: {wrapped_text}', fill="black", font=ImageFont.truetype(f"{repo_root}/simlingo_training/arial.ttf", 20))
+            try:
+                font = ImageFont.truetype(f"{repo_root}/arial.ttf", 20)
+            except OSError:
+                font = ImageFont.load_default()
+            white_draw.text((10, y_curr), f'{i} GT: {wrapped_text}', fill="black", font=font)
             y_curr += 20*lines_wrap
-            white_draw.text((10, y_curr), f'{i} Pred: {wrapped_pred_text}', fill="black", font=ImageFont.truetype(f"{repo_root}/simlingo_training/arial.ttf", 20))
+            white_draw.text((10, y_curr), f'{i} Pred: {wrapped_pred_text}', fill="black", font=font)
             y_curr += 20*lines_wrap_pred + 20
         ax = fig.add_subplot(rows, cols, i + 1)
         # Predicted waypoints
