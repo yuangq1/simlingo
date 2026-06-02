@@ -130,6 +130,100 @@ vs v3：去掉 command one-hot，state 仅 speed(1)+tp(2)=3 维。
 | v2 | ✅ | ✅ | ✅ | 全部模块 | 全面注入 vs 单点？ |
 | v3 | ✅ | ✅ | ✅ | fusion(感知/规划分离) | 统一融合是否更好？ |
 | v4 | ✅ | ✅ | ❌ | fusion(语言替代cmd) | 语言能否替代 hard command？ |
+| v5-a | ✅ FiLM(layer4) | ✅ | ✅ | FiLM only (visual) | 语言条件化视觉 backbone？ |
+| v5-b | ✅ FiLM(layer3+4) | ✅ | ✅ | FiLM only (visual) | 中层 FiLM 是否更好？ |
+| v5-c | ✅ FiLM(layer1-4) | ✅ | ✅ | FiLM only (visual) | 全深度 FiLM 上限？ |
+| v5-d | ✅ FiLM(layer1-4) | ✅ | ✅ | FiLM + v3 fusion | 视觉+规划联合条件化？ |
+
+---
+
+## v5 系列 — language-conditioned ResNet via FiLM
+
+**核心思路**：不用 VLM 替换 ResNet-34，而是通过 FiLM adapter 用语言 embedding 条件化原始 ResNet-34 的特征提取。
+
+```
+RGB → ResNet-34 with FiLM(lang) after each stage → TCP decoder
+```
+
+FiLM (Feature-wise Linear Modulation):
+- 从 lang_embed 生成 channel-wise gamma/beta
+- 调制 feature map: `feat = feat * (1 + gamma) + beta`
+- 不改变空间尺寸，参数量可控
+
+### v5-a — FiLM layer4 only
+
+lang_embed → FiLM(layer4: 512ch)，decoder = v0（无语言注入）
+
+| 模块 | 输入 |
+|------|------|
+| ResNet layer1-3 | 标准 ResNet |
+| ResNet layer4 | 标准 ResNet + **FiLM(lang)** |
+| Join | feature_emb + vis_pooled + state_embed |
+| Attention | cnn_feature + state_embed |
+| GRU | x(2) + tp(2) + state_embed |
+| Route | j + att_vis + state_embed |
+
+### 结果
+
+| 指标 | 0% 口语 | 50% 口语 | 100% 口语 |
+|------|--------|---------|----------|
+| Waypoints ADE | — | — | — |
+| Waypoints FDE | — | — | — |
+| Route ADE | — | — | — |
+| Route FDE | — | — | — |
+
+---
+
+### v5-b — FiLM layer3+4
+
+lang_embed → FiLM(layer3: 256ch + layer4: 512ch)，decoder = v0
+
+### 结果
+
+| 指标 | 0% 口语 | 50% 口语 | 100% 口语 |
+|------|--------|---------|----------|
+| Waypoints ADE | — | — | — |
+| Waypoints FDE | — | — | — |
+| Route ADE | — | — | — |
+| Route FDE | — | — | — |
+
+---
+
+### v5-c — FiLM layer1-4
+
+lang_embed → FiLM(layer1: 64ch + layer2: 128ch + layer3: 256ch + layer4: 512ch)，decoder = v0
+
+### 结果
+
+| 指标 | 0% 口语 | 50% 口语 | 100% 口语 |
+|------|--------|---------|----------|
+| Waypoints ADE | — | — | — |
+| Waypoints FDE | — | — | — |
+| Route ADE | — | — | — |
+| Route FDE | — | — | — |
+
+---
+
+### v5-d — FiLM layer1-4 + v3 fusion（★全模型语言条件化）
+
+lang_embed → FiLM(layer1-4) + v3 decoder（fusion_mlp, 感知/规划分离）
+
+| 模块 | 输入 |
+|------|------|
+| ResNet layer1-4 | 标准 ResNet + **FiLM(lang)** after each stage |
+| Join | feature_emb + vis_pooled + lang_embed + state_embed |
+| Attention | cnn_feature + **lang_embed only** |
+| GRU | x(2) + tp(2) + **fused_embed** |
+| Route | j + att_vis + **fused_embed** |
+
+### 结果
+
+| 指标 | 0% 口语 | 50% 口语 | 100% 口语 |
+|------|--------|---------|----------|
+| Waypoints ADE | — | — | — |
+| Waypoints FDE | — | — | — |
+| Route ADE | — | — | — |
+| Route FDE | — | — | — |
 
 ---
 
@@ -143,8 +237,13 @@ v0 (ResNet-34, 纯视觉 TCP)
               └─ v2 (lang 分散注入)
                    └─ + fusion_mlp, 感知/规划分离
                        └─ v3 (融合, 保留 cmd, ★主模型)
-                            └─ - cmd, 语言替代导航意图
-                                └─ v4 (融合, 无 cmd, ★最有论文价值)
+                            ├─ - cmd, 语言替代导航意图
+                            │   └─ v4 (融合, 无 cmd)
+                            └─ + FiLM language-conditioned ResNet
+                                ├─ v5-a (FiLM layer4)
+                                ├─ v5-b (FiLM layer3+4)
+                                ├─ v5-c (FiLM layer1-4)
+                                └─ v5-d (FiLM layer1-4 + v3 fusion, ★全模型语言条件化)
 ```
 
 ---
@@ -159,6 +258,10 @@ PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v1
 PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v2
 PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v3
 PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v4
+PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v5a
+PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v5b
+PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v5c
+PYTHONPATH=$PWD python simlingo_training/train.py experiment=tcp_v5d
 ```
 
 ## 评估

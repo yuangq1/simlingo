@@ -19,6 +19,28 @@ from simlingo_training.models.utils import summarise_losses
 from simlingo_training.utils.custom_types import DrivingExample, DrivingInput
 
 
+class FiLM(nn.Module):
+    """Feature-wise Linear Modulation — language-conditioned feature modulation.
+
+    Generates channel-wise gamma/beta from lang_embed to modulate ResNet
+    feature maps without changing spatial dimensions.
+    """
+
+    def __init__(self, lang_dim: int, channels: int):
+        super().__init__()
+        self.to_gamma_beta = nn.Sequential(
+            nn.Linear(lang_dim, channels * 2),
+        )
+
+    def forward(self, x, lang_embed):
+        # x: [B, C, H, W],  lang_embed: [B, lang_dim]
+        gamma_beta = self.to_gamma_beta(lang_embed)  # [B, 2C]
+        gamma, beta = gamma_beta.chunk(2, dim=1)
+        gamma = gamma.unsqueeze(-1).unsqueeze(-1)  # [B, C, 1, 1]
+        beta = beta.unsqueeze(-1).unsqueeze(-1)    # [B, C, 1, 1]
+        return x * (1.0 + gamma) + beta
+
+
 class BaseResNetTCP(pl.LightningModule):
     """Shared ResNet-34 backbone + TCP decoder + training logic."""
 
@@ -35,9 +57,19 @@ class BaseResNetTCP(pl.LightningModule):
         # ── ResNet-34 visual backbone ──
         self.resnet = ResNetEncoder(pretrained=True)
 
+        # ── Language-conditioned ResNet (FiLM adapters) ──
+        self.use_resnet_film = getattr(self, 'use_resnet_film', False)
+        self.resnet_film_layers = getattr(self, 'resnet_film_layers', [])
+        if self.use_resnet_film:
+            layer_channels = {'layer1': 64, 'layer2': 128, 'layer3': 256, 'layer4': 512}
+            lang_dim = getattr(self, 'lang_dim', 128)
+            for layer_name, ch in layer_channels.items():
+                if layer_name in self.resnet_film_layers:
+                    setattr(self, f'film_{layer_name}', FiLM(lang_dim, ch))
+
         # ── SimLingo VLM (language encoder only, NOT visual backbone) ──
         self.use_lang = getattr(self, 'use_lang', False)
-        if self.use_lang:
+        if self.use_lang or self.use_resnet_film:
             self.vision_model = hydra.utils.instantiate(
                 self.vision_model, cfg_data_module=cfg_data_module,
                 processor=self.processor, cache_dir=cache_dir, _recursive_=False)
@@ -141,20 +173,71 @@ class BaseResNetTCP(pl.LightningModule):
         del last_hidden, llm_out, prompt_embeds
         return lang_embed
 
+    # ── ResNet with FiLM conditioning ───────────────────────
+
+    def _run_resnet_film(self, x, lang_embed):
+        """Run ResNet-34 with FiLM conditioning after specified stages.
+
+        Args:
+            x: [B_total, 3, H, W]  normalized RGB
+            lang_embed: [B_total, lang_dim]  language embedding
+
+        Returns:
+            feature_emb: [B_total, 1000]
+            cnn_feature: [B_total, 512, h, w]
+        """
+        x = self.resnet.conv1(x)
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+
+        x = self.resnet.layer1(x)
+        if 'layer1' in self.resnet_film_layers:
+            x = self.film_layer1(x, lang_embed)
+
+        x = self.resnet.layer2(x)
+        if 'layer2' in self.resnet_film_layers:
+            x = self.film_layer2(x, lang_embed)
+
+        x = self.resnet.layer3(x)
+        if 'layer3' in self.resnet_film_layers:
+            x = self.film_layer3(x, lang_embed)
+
+        x_layer4 = self.resnet.layer4(x)
+        if 'layer4' in self.resnet_film_layers:
+            x_layer4 = self.film_layer4(x_layer4, lang_embed)
+
+        x_pooled = self.resnet.avgpool(x_layer4)
+        x_flat = torch.flatten(x_pooled, 1)
+        feature_emb = self.resnet.fc(x_flat)
+
+        return feature_emb, x_layer4
+
     # ── Core forward ────────────────────────────────────────
 
     def forward_model(self, driving_input: DrivingInput):
         B = driving_input.camera_images.size(0)
         device = driving_input.camera_images.device
 
-        # ── ResNet visual features ──
+        # ── Preprocess images ──
         pv = driving_input.camera_images  # [B, 1, NP, 3, H, W] float [0,1]
-        # Flatten all leading dims to batch: [B*NP, 3, H, W]
         pv_flat = pv.reshape(-1, pv.shape[-3], pv.shape[-2], pv.shape[-1])
         pv_norm = (pv_flat - self.im_mean) / self.im_std
-        feature_emb, cnn_feature = self.resnet(pv_norm)
-        # Average over camera views back to [B, ...]
         NP = pv_flat.shape[0] // B
+
+        # ── Language embedding (extract BEFORE ResNet if FiLM is used) ──
+        lang_embed = None
+        if self.use_lang or self.use_resnet_film:
+            lang_embed = self._extract_lang_embed(driving_input)  # [B, lang_dim]
+
+        # ── ResNet visual features (with optional FiLM conditioning) ──
+        if self.use_resnet_film and lang_embed is not None:
+            lang_exp = lang_embed.unsqueeze(1).expand(-1, NP, -1).reshape(B * NP, -1)
+            feature_emb, cnn_feature = self._run_resnet_film(pv_norm, lang_exp)
+        else:
+            feature_emb, cnn_feature = self.resnet(pv_norm)
+
+        # Average over camera views back to [B, ...]
         feature_emb = feature_emb.view(B, NP, -1).mean(dim=1)  # [B, 1000]
         cnn_feature = cnn_feature.view(B, NP, *cnn_feature.shape[1:]).mean(dim=1)  # [B, 512, h, w]
         vis_pooled = cnn_feature.flatten(2).mean(dim=2)  # [B, 512]
@@ -176,11 +259,9 @@ class BaseResNetTCP(pl.LightningModule):
 
         state_embed = self.measurements(state)  # [B, state_dim]
 
-        # ── Language embedding (optional) ──
-        lang_embed = None
+        # ── Language embedding (already extracted above; compute fusion if needed) ──
         fused_embed = None
-        if self.use_lang:
-            lang_embed = self._extract_lang_embed(driving_input)  # [B, lang_dim]
+        if self.use_lang and lang_embed is not None:
             fused_embed = self._compute_fused(lang_embed, state_embed)
 
         # ── Join ──

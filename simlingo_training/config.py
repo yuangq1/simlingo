@@ -139,6 +139,86 @@ class TCPV4Config:
 
 
 @dataclass
+class TCPV5AConfig:
+    """TCP v5-a — FiLM layer4 + v0 decoder."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    fused_dim: int = 256
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v5a.TCPModelV5A"
+
+
+@dataclass
+class TCPV5BConfig:
+    """TCP v5-b — FiLM layer3+4 + v0 decoder."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    fused_dim: int = 256
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v5b.TCPModelV5B"
+
+
+@dataclass
+class TCPV5CConfig:
+    """TCP v5-c — FiLM layer1-4 + v0 decoder."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    fused_dim: int = 256
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v5c.TCPModelV5C"
+
+
+@dataclass
+class TCPV5DConfig:
+    """TCP v5-d — FiLM layer1-4 + v3 fusion decoder."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    fused_dim: int = 256
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v5d.TCPModelV5D"
+
+
+@dataclass
 class DatasetBaseConfig:
     data_path: str = "/home/katrinrenz/coding/wayve_carla/database/expertv3_2*"
     bucket_path: str = "data/buckets"
@@ -261,6 +341,10 @@ def register_configs():
     cs.store(group="model", name="tcp_v2", node=TCPV2Config)
     cs.store(group="model", name="tcp_v3", node=TCPV3Config)
     cs.store(group="model", name="tcp_v4", node=TCPV4Config)
+    cs.store(group="model", name="tcp_v5a", node=TCPV5AConfig)
+    cs.store(group="model", name="tcp_v5b", node=TCPV5BConfig)
+    cs.store(group="model", name="tcp_v5c", node=TCPV5CConfig)
+    cs.store(group="model", name="tcp_v5d", node=TCPV5DConfig)
     cs.store(group="model/vision_model", name="vlm", node=VLMEncoderConfig)
     cs.store(group="model/language_model", name="llm", node=LanguageModelConfig)
 
