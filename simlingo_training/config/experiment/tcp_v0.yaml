@@ -1,0 +1,49 @@
+# @package _global_
+# TCP v0 — 原始 ResNet-34 TCP baseline（无语言注入）
+defaults:
+  - /data_module: carla_no_buckets
+  - /model/vision_model: vlm
+  - /model: tcp_v0
+
+model:
+  language_model:
+    variant: 'OpenGVLab/InternVL2-1B'
+    lora: True
+    lora_alpha: 64
+    lora_r: 32
+    lora_dropout: 0.1
+
+data_module:
+  batch_size: 2
+  num_workers: 4
+  driving_dataset: null
+  base_dataset:
+    data_path: database/simlingo
+    bucket_path: database/simlingo/buckets_paths.pkl
+    pred_len: 11
+    cut_bottom_quarter: True
+    use_commentary: False
+    use_qa: False
+    qa_augmentation: False
+    img_shift_augmentation: True
+    img_shift_augmentation_prob: 0.5
+    hist_len: 1
+    route_as: target_point_command
+    use_lmdrive_commands: True
+    use_old_towns: True
+    use_town13: True
+    use_safety_flag: False
+
+max_epochs: 5
+val_every_n_epochs: 1
+gpus: 1
+seed: 42
+name: tcp_v0
+debug: true
+strategy: auto
+enable_wandb: false
+precision: 16-mixed
+
+hydra:
+  run:
+    dir: outputs/${wandb_name}_${name}

@@ -40,8 +40,29 @@ class DrivingModelConfig:
     _target_: str = "simlingo_training.models.driving.DrivingModel"
 
 
+# ── New TCP model configs (ResNet-34 backbone) ──
+
 @dataclass
-class TCPLangModelConfig:
+class TCPV0Config:
+    """TCP v0 — ResNet-34 baseline, no language used by model."""
+    vision_model: Any  # required by data pipeline (tokenizer/processor)
+    language_model: Any  # required by data pipeline
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    state_dim: int = 128
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v0.TCPModelV0"
+
+
+@dataclass
+class TCPV1Config:
+    """TCP v1 — ResNet-34 + lang_embed to GRU."""
     vision_model: Any
     language_model: Any
 
@@ -50,11 +71,71 @@ class TCPLangModelConfig:
     betas: Tuple[float, float] = (0.9, 0.999)
     pct_start: float = 0.05
     lang_dim: int = 128
+    state_dim: int = 128
     pred_len: int = 11
     predict_route_as_wps: bool = True
     speed_wps_mode: str = '2d'
 
-    _target_: str = "simlingo_training.models.tcp_lang.TCPLangModel"
+    _target_: str = "simlingo_training.models.tcp_v1.TCPModelV1"
+
+
+@dataclass
+class TCPV2Config:
+    """TCP v2 — ResNet-34 + lang_embed to Join/Attn/GRU/Route."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v2.TCPModelV2"
+
+
+@dataclass
+class TCPV3Config:
+    """TCP v3 — ResNet-34 + unified fusion (keep command)."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    fused_dim: int = 256
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v3.TCPModelV3"
+
+
+@dataclass
+class TCPV4Config:
+    """TCP v4 — ResNet-34 + unified fusion (no command, language replaces it)."""
+    vision_model: Any
+    language_model: Any
+
+    lr: float = 3e-5
+    weight_decay: float = 0.1
+    betas: Tuple[float, float] = (0.9, 0.999)
+    pct_start: float = 0.05
+    lang_dim: int = 128
+    state_dim: int = 128
+    fused_dim: int = 256
+    pred_len: int = 11
+    predict_route_as_wps: bool = True
+    speed_wps_mode: str = '2d'
+
+    _target_: str = "simlingo_training.models.tcp_v4.TCPModelV4"
 
 
 @dataclass
@@ -135,7 +216,7 @@ class DrivingDataModuleConfig:
 
 @dataclass
 class TrainConfig:
-    model: DrivingModelConfig
+    model: Any
     data_module: Any
 
     seed: int = 42
@@ -175,7 +256,11 @@ def register_configs():
     cs.store(group="data_module", name="driving", node=DrivingDataModuleConfig)
     cs.store(group="data_module/base_dataset", name="dataset", node=DatasetBaseConfig)
     cs.store(group="model", name="driving", node=DrivingModelConfig)
-    cs.store(group="model", name="tcp_lang", node=TCPLangModelConfig)
+    cs.store(group="model", name="tcp_v0", node=TCPV0Config)
+    cs.store(group="model", name="tcp_v1", node=TCPV1Config)
+    cs.store(group="model", name="tcp_v2", node=TCPV2Config)
+    cs.store(group="model", name="tcp_v3", node=TCPV3Config)
+    cs.store(group="model", name="tcp_v4", node=TCPV4Config)
     cs.store(group="model/vision_model", name="vlm", node=VLMEncoderConfig)
     cs.store(group="model/language_model", name="llm", node=LanguageModelConfig)
 

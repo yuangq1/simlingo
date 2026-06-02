@@ -5,6 +5,7 @@
 import sys, os
 import hydra
 import numpy as np
+import pytorch_lightning as pl
 import torch
 from tqdm import tqdm
 from hydra.utils import get_original_cwd
@@ -40,6 +41,7 @@ def set_rewriter_prob(datasets, prob):
 
 @hydra.main(config_path="config", config_name="config", version_base="1.1")
 def main(cfg):
+    pl.seed_everything(cfg.seed, workers=True)
     ckpt = cfg.checkpoint_path
     if ckpt is None:
         print("ERROR: checkpoint_path=... required")

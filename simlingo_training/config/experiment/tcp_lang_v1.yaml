@@ -1,0 +1,42 @@
+# @package _global_
+# TCP_lang v1 — VLM 语言增强 + command one-hot
+defaults:
+  - /data_module: carla_no_buckets
+  - /model/vision_model: vlm
+  - /model/language_model: llm
+  - /model: tcp_lang_v1
+
+data_module:
+  batch_size: 2
+  num_workers: 4
+  driving_dataset: null
+  base_dataset:
+    data_path: database/simlingo
+    bucket_path: database/simlingo/buckets_paths.pkl
+    pred_len: 11
+    cut_bottom_quarter: True
+    use_commentary: False
+    use_qa: False
+    qa_augmentation: False
+    img_shift_augmentation: True
+    img_shift_augmentation_prob: 0.5
+    hist_len: 1
+    route_as: target_point_command
+    use_lmdrive_commands: True
+    use_old_towns: True
+    use_town13: True
+    use_safety_flag: False
+
+max_epochs: 5
+val_every_n_epochs: 1
+gpus: 1
+seed: 42
+name: tcp_lang_v1
+debug: true
+strategy: auto
+enable_wandb: false
+precision: 16-mixed
+
+hydra:
+  run:
+    dir: outputs/${wandb_name}_${name}
